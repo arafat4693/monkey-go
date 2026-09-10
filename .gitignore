@@ -1,0 +1,4 @@
+/monkey-go
+*.exe
+*.test
+*.out
