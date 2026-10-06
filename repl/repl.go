@@ -5,17 +5,26 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/arafat4693/monkey-go/evaluator"
+	"github.com/arafat4693/monkey-go/compiler"
 	"github.com/arafat4693/monkey-go/lexer"
 	"github.com/arafat4693/monkey-go/object"
 	"github.com/arafat4693/monkey-go/parser"
+	"github.com/arafat4693/monkey-go/vm"
 )
 
 const PROMPT = ">> "
 
 func Start(in io.Reader, out io.Writer) {
 	scanner := bufio.NewScanner(in)
-	env := object.NewEnvironment()
+	// env := object.NewEnvironment()
+
+	constants := []object.Object{}
+	globals := make([]object.Object, vm.GlobalsSize)
+
+	symbolTable := compiler.NewSymbolTable()
+	for i, v := range object.Builtins {
+		symbolTable.DefineBuiltin(i, v.Name)
+	}
 
 	for {
 		fmt.Fprintf(out, PROMPT)
@@ -35,11 +44,34 @@ func Start(in io.Reader, out io.Writer) {
 			continue
 		}
 
-		evaluated := evaluator.Eval(program, env)
-		if evaluated != nil {
-			io.WriteString(out, evaluated.Inspect())
-			io.WriteString(out, "\n")
+		// evaluated := evaluator.Eval(program, env)
+		// if evaluated != nil {
+		// 	io.WriteString(out, evaluated.Inspect())
+		// 	io.WriteString(out, "\n")
+		// }
+
+		comp := compiler.NewWithState(symbolTable, constants)
+
+		err := comp.Compile(program)
+		if err != nil {
+			fmt.Fprintf(out, "Woops! Compilation failed:\n %s\n", err)
+			continue
 		}
+
+		code := comp.Bytecode()
+		constants = code.Constants
+
+		machine := vm.NewWithGlobalsStore(code, globals)
+
+		err = machine.Run()
+		if err != nil {
+			fmt.Fprintf(out, "Woops! Executing bytecode failed:\n %s\n", err)
+			continue
+		}
+
+		stackTop := machine.LastPoppedStackElem()
+		io.WriteString(out, stackTop.Inspect())
+		io.WriteString(out, "\n")
 	}
 }
 
